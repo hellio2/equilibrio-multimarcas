@@ -12,7 +12,8 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 
 // NOVAS IMPORTAÇÕES (PAGAMENTO E FRETE)
-const { MercadoPagoConfig, Preference } = require('mercadopago');
+// Substitua a linha antiga de importação do MP por esta:
+const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 const { calcularPrecoPrazo } = require('correios-brasil');
 
 // Inicializa o Mercado Pago com a sua chave
@@ -284,62 +285,53 @@ app.post('/api/frete', async (req, res) => {
     }
 });
 
+
 // =========================================================
-// ROTA DE PAGAMENTO (INTEGRAÇÃO MERCADO PAGO - BARE MINIMUM)
+// ROTA DE CONFIGURAÇÃO (Envia a chave pública pro Frontend)
 // =========================================================
-app.post('/api/pagamento/checkout', autenticarToken, async (req, res) => {
+app.get('/api/config/mp', (req, res) => {
+    res.json({ publicKey: process.env.MP_PUBLIC_KEY });
+});
+
+// =========================================================
+// ROTA DE PAGAMENTO (CHECKOUT BRICKS TRANPARENTE)
+// =========================================================
+app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
     try {
-        const result = await pool.query(
-            `SELECT c.quantidade, p.nome, p.preco, p.imagem_url 
-             FROM carrinho c JOIN produtos p ON c.produto_id = p.id 
-             WHERE c.usuario_id = $1`, 
-            [req.usuario.id]
-        );
+        // Inicializa o cliente de pagamento direto
+        const client = new Payment(clienteMercadoPago);
+        
+        // Pega os dados validados que o Brick gerou no Frontend
+        const paymentData = {
+            body: {
+                transaction_amount: req.body.transaction_amount,
+                token: req.body.token, // Token do cartão gerado de forma segura pelo MP
+                description: 'Pedido - Império Multimarcas',
+                installments: req.body.installments,
+                payment_method_id: req.body.payment_method_id,
+                issuer_id: req.body.issuer_id,
+                payer: {
+                    email: req.usuario.email, // Amarra a compra ao email logado
+                    identification: req.body.payer?.identification,
+                    first_name: req.body.payer?.first_name,
+                    last_name: req.body.payer?.last_name
+                }
+            }
+        };
 
-        const itensCarrinho = result.rows;
+        // Processa o pagamento
+        const payment = await client.create(paymentData);
 
-        if (itensCarrinho.length === 0) {
-            return res.status(400).json({ erro: 'Seu carrinho está vazio.' });
+        // Verifica o status gerado
+        if (payment.status === 'approved' || payment.status === 'in_process' || payment.status === 'pending') {
+            res.status(200).json({ sucesso: true, id: payment.id, status: payment.status });
+        } else {
+            res.status(400).json({ erro: 'Pagamento não aprovado pela financeira.', status: payment.status });
         }
 
-        // Formatação exata, sem descrições extras ou IDs customizados longos
-        const itensMercadoPago = itensCarrinho.map(item => ({
-            id: "1234",
-            title: item.nome,
-            quantity: Number(item.quantidade),
-            unit_price: Number(item.preco),
-            currency_id: 'BRL'
-        }));
-
-        const preference = new Preference(clienteMercadoPago);
-        
-        // REQUISIÇÃO MINIMALISTA: Apenas os itens e para onde voltar. Sem 'Payer'.
-        const respostaMP = await preference.create({
-            body: {
-                items: itensMercadoPago,
-                back_urls: {
-                    success: "http://localhost:3000/sucesso.html",
-                    failure: "http://localhost:3000/checkout.html",
-                    pending: "http://localhost:3000/checkout.html"
-                },
-                auto_return: "approved"
-            }
-        });
-
-        res.status(200).json({ 
-            sucesso: true, 
-            init_point: respostaMP.sandbox_init_point || respostaMP.init_point 
-        });
-
     } catch (err) {
-        console.error("Bloqueio mantido pelo Mercado Pago. Ativando Modo de Simulação Local."); 
-        
-        // PLANO DE CONTINGÊNCIA: Se o MP bloquear por validação de conta, 
-        // nós geramos um redirecionamento automático simulado para você continuar o projeto!
-        res.status(200).json({ 
-            sucesso: true, 
-            init_point: "http://localhost:3000/sucesso.html?simulado=true" 
-        });
+        console.error("Erro no Processamento do Brick:", err);
+        res.status(500).json({ erro: 'Erro interno ao processar o pagamento.' });
     }
 });
 

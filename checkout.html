@@ -3,17 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Império Multimarcas | Checkout Seguro</title>
+    <title>Império Multimarcas | Checkout Transparente</title>
     <link rel="stylesheet" href="css/variaveis.css">
     <link rel="stylesheet" href="css/estilos.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
+    
+    <script src="https://sdk.mercadopago.com/js/v2"></script>
+
     <style>
         .checkout-layout { max-width: 800px; margin: 60px auto; padding: 0 20px; }
         .checkout-box { background: #fff; padding: 40px; border: 1px solid #eee; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .checkout-header { text-align: center; margin-bottom: 30px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
         .checkout-header h2 { font-size: 2rem; font-weight: 900; text-transform: uppercase; }
-        .checkout-header i { color: #009ee3; font-size: 2.5rem; margin-bottom: 15px; } /* Cor do MP */
+        .checkout-header i { color: #009ee3; font-size: 2.5rem; margin-bottom: 15px; }
         
         .cep-area { display: flex; gap: 10px; margin-bottom: 20px; }
         .cep-area input { flex: 1; padding: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
@@ -21,12 +24,9 @@
         
         .frete-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px; }
         .frete-card { border: 1px solid #ddd; padding: 15px; border-radius: 4px; display: flex; justify-content: space-between; cursor: pointer; transition: 0.3s; }
-        .frete-card:hover { border-color: #111; }
         
-        .checkout-btn { width: 100%; background: #009ee3; color: #fff; border: none; padding: 20px; font-size: 1.2rem; font-weight: 900; text-transform: uppercase; border-radius: 4px; cursor: pointer; transition: 0.3s; margin-top: 20px; }
-        .checkout-btn:hover { background: #007eb5; }
-        
-        .secure-badge { text-align: center; font-size: 0.85rem; color: #666; margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        /* Oculta o container do brick até ele carregar o valor */
+        #paymentBrick_container { min-height: 400px; }
     </style>
 </head>
 <body style="background-color: #f4f6f9;">
@@ -36,7 +36,7 @@
             <div class="checkout-header">
                 <i class="fas fa-lock"></i>
                 <h2>Finalizar <span>Pedido</span></h2>
-                <p>Ambiente 100% seguro. Seus dados são criptografados.</p>
+                <p>Ambiente 100% seguro. Seus dados não são salvos nos nossos servidores.</p>
             </div>
 
             <div style="margin-bottom: 30px;">
@@ -49,90 +49,128 @@
             </div>
 
             <div style="border-top: 1px solid #eee; padding-top: 30px;">
-                <h4 style="margin-bottom: 10px; text-transform: uppercase; font-size: 0.9rem;">2. Pagamento Seguro</h4>
-                <p style="font-size: 0.9rem; color: #666; margin-bottom: 20px;">Você será redirecionado para a plataforma oficial do Mercado Pago para efetuar o pagamento via Pix, Boleto ou Cartão de Crédito.</p>
+                <h4 style="margin-bottom: 15px; text-transform: uppercase; font-size: 0.9rem;">2. Pagamento Seguro</h4>
                 
-                <button class="checkout-btn" id="btn-pagar" onclick="iniciarPagamento()">
-                    Ir para Pagamento Seguro <i class="fas fa-shield-alt" style="margin-left: 10px;"></i>
-                </button>
-                
-                <div class="secure-badge">
-                    <i class="fas fa-check-circle" style="color: #28a745;"></i> Processado por Mercado Pago
+                <div id="paymentBrick_container">
+                    <p style="text-align: center; color: #666; padding: 40px;"><i class="fas fa-spinner fa-spin"></i> Carregando ambiente seguro...</p>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
+        // Lógica de Frete (Mantida intacta)
         async function calcularFrete() {
             const cep = document.getElementById('cep-input').value;
             const container = document.getElementById('frete-resultados');
-            
             if (cep.length < 8) return alert('Digite um CEP válido.');
             
             container.innerHTML = '<p>Calculando rota com os Correios...</p>';
-            
             try {
                 const resposta = await fetch('/api/frete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cep_destino: cep })
                 });
-                
                 const dados = await resposta.json();
                 if (resposta.ok) {
                     container.innerHTML = dados.fretes.map(f => `
                         <div class="frete-card">
-                            <div>
-                                <strong style="text-transform: uppercase;">${f.Codigo === '04014' ? 'SEDEX' : 'PAC'}</strong>
-                                <p style="font-size: 0.85rem; color: #666; margin-top: 5px;">Entrega em até ${f.PrazoEntrega} dias úteis</p>
-                            </div>
-                            <strong style="font-size: 1.1rem;">R$ ${f.Valor}</strong>
+                            <div><strong>${f.Codigo === '04014' ? 'SEDEX' : 'PAC'}</strong><br><small>${f.PrazoEntrega} dias úteis</small></div>
+                            <strong>R$ ${f.Valor}</strong>
                         </div>
                     `).join('');
-                } else {
-                    container.innerHTML = `<p style="color: red;">${dados.erro}</p>`;
-                }
-            } catch (e) {
-                container.innerHTML = '<p style="color: red;">Erro ao calcular frete.</p>';
-            }
+                } else { container.innerHTML = `<p style="color: red;">${dados.erro}</p>`; }
+            } catch (e) { container.innerHTML = '<p style="color: red;">Erro ao calcular frete.</p>'; }
         }
 
-        async function iniciarPagamento() {
-            const token = localStorage.getItem('imperio_token');
-            const btn = document.getElementById('btn-pagar');
-            
-            if (!token) {
-                alert("Você precisa estar logado para finalizar a compra.");
+        // ==========================================
+        // INICIALIZAÇÃO DO MERCADO PAGO BRICKS
+        // ==========================================
+        document.addEventListener("DOMContentLoaded", async () => {
+            const tokenAuth = localStorage.getItem('imperio_token');
+            if (!tokenAuth) {
+                alert("Sessão expirada. Faça login para continuar.");
                 window.location.href = 'login.html';
                 return;
             }
 
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando link seguro...';
-            btn.disabled = true;
-
             try {
-                const resposta = await fetch('/api/pagamento/checkout', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                // 1. Pega a Chave Pública do Backend
+                const configRes = await fetch('/api/config/mp');
+                const configData = await configRes.json();
+                const mp = new MercadoPago(configData.publicKey, { locale: 'pt-BR' });
+
+                // 2. Consulta o valor total real do carrinho no Backend
+                const cartRes = await fetch('/api/carrinho', { headers: { 'Authorization': `Bearer ${tokenAuth}` }});
+                const cartData = await cartRes.json();
+                
+                if(cartData.length === 0) {
+                    document.getElementById('paymentBrick_container').innerHTML = "<p>Seu carrinho está vazio.</p>";
+                    return;
+                }
+
+                // Soma o total (Sem frete para simplificar neste primeiro momento)
+                const totalAmount = cartData.reduce((acc, item) => acc + (parseFloat(item.preco) * parseInt(item.qtd)), 0);
+
+                // 3. Constrói e renderiza o formulário de pagamento (Brick)
+                const bricksBuilder = mp.bricks();
+                
+                // Limpa o aviso de "Carregando"
+                document.getElementById('paymentBrick_container').innerHTML = "";
+
+                await bricksBuilder.create('payment', 'paymentBrick_container', {
+                    initialization: {
+                        amount: totalAmount // O Brick precisa saber o valor para calcular parcelas
+                    },
+                    customization: {
+                        paymentMethods: {
+                            ticket: "all",
+                            creditCard: "all",
+                            pix: "all"
+                        }
+                    },
+                    callbacks: {
+                        onReady: () => { console.log('Brick carregado com sucesso!'); },
+                        onSubmit: (paymentData) => {
+                            // Esta função roda quando o cliente clica no botão "Pagar" dentro do Brick
+                            return new Promise((resolve, reject) => {
+                                fetch('/api/pagamento/processar', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${tokenAuth}`
+                                    },
+                                    body: JSON.stringify(paymentData.formData)
+                                })
+                                .then((res) => res.json())
+                                .then((data) => {
+                                    if (data.sucesso) {
+                                        // Pagamento aprovado ou PIX gerado! Vai para a página de sucesso registrar o pedido.
+                                        window.location.href = 'sucesso.html';
+                                        resolve();
+                                    } else {
+                                        alert("Erro: " + data.erro);
+                                        reject();
+                                    }
+                                })
+                                .catch((error) => {
+                                    alert("Falha de conexão.");
+                                    reject();
+                                });
+                            });
+                        },
+                        onError: (error) => {
+                            console.error("Erro no Brick:", error);
+                        }
+                    }
                 });
 
-                const dados = await resposta.json();
-
-                if (resposta.ok && dados.init_point) {
-                    // Redireciona o cliente para a URL do Mercado Pago
-                    window.location.href = dados.init_point;
-                } else {
-                    alert(dados.erro || "Erro ao gerar pagamento. Verifique seu carrinho.");
-                    btn.innerHTML = 'Tentar Novamente';
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                alert("Erro de conexão com o servidor de pagamentos.");
-                btn.innerHTML = 'Tentar Novamente';
-                btn.disabled = false;
+            } catch (error) {
+                console.error(error);
+                document.getElementById('paymentBrick_container').innerHTML = "<p style='color:red;'>Erro ao carregar módulo de pagamento. Tente recarregar a página.</p>";
             }
-        }
+        });
     </script>
 </body>
 </html>
