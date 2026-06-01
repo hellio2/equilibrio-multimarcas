@@ -11,8 +11,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@mercadopago/sdk-react": "^1.0.7",
     "bcryptjs": "^3.0.3",
-    "cloudinary": "^1.41.3",
+    "cloudinary": "^2.10.0",
     "correios-brasil": "^3.0.6",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -20,7 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "mercadopago": "^3.0.0",
     "multer": "^2.1.1",
-    "multer-storage-cloudinary": "^4.0.0",
+    "multer-storage-cloudinary": "^2.2.1",
     "pg": "^8.21.0"
   }
 }
