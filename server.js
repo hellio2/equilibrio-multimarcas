@@ -377,19 +377,50 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
 // =========================================================
 // ROTA DE PAGAMENTO (CHECKOUT BRICKS TRANPARENTE - PRODUÇÃO)
 // =========================================================
-
 app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
     try {
         const client = new Payment(clienteMercadoPago);
         const { transaction_amount, token, installments, payment_method_id, issuer_id, payer } = req.body;
 
-        // 🚨 1. RAIO-X DO FRONTEND: O que a tela realmente enviou pro Backend?
-        console.log("\n=======================================================");
-        console.log("📥 DADOS RECEBIDOS DO CHECKOUT BRICK:");
-        console.log(JSON.stringify(req.body, null, 2));
-        console.log("=======================================================\n");
+        // =======================================================
+        // 1. SANITIZAÇÃO DE DADOS (O Segredo da Aprovação)
+        // =======================================================
+        const rawAddress = payer?.address || req.body;
+        
+        // A) Converte Estado por extenso para Sigla (Ex: "Espírito Santo" -> "ES")
+        let uf = rawAddress.federal_unit || rawAddress.estado || "SP";
+        const estadosBR = {
+            "acre": "AC", "alagoas": "AL", "amapá": "AP", "amazonas": "AM", "bahia": "BA",
+            "ceará": "CE", "distrito federal": "DF", "espírito santo": "ES", "goiás": "GO",
+            "maranhão": "MA", "mato grosso": "MT", "mato grosso do sul": "MS", "minas gerais": "MG",
+            "pará": "PA", "paraíba": "PB", "paraná": "PR", "pernambuco": "PE", "piauí": "PI",
+            "rio de janeiro": "RJ", "rio grande do norte": "RN", "rio grande do sul": "RS",
+            "rondônia": "RO", "roraima": "RR", "santa catarina": "SC", "são paulo": "SP",
+            "sergipe": "SE", "tocantins": "TO"
+        };
+        // Se a pessoa digitou mais de 2 letras, busca no dicionário ou força as 2 primeiras letras
+        if (uf.length > 2) {
+            uf = estadosBR[uf.toLowerCase().trim()] || uf.substring(0, 2).toUpperCase();
+        }
 
-        // ... (mantenha o código da consulta do carrinho e referenciaExterna iguais) ...
+        // B) Limpa o Número (Extrai apenas os dígitos numéricos de "108, Casa")
+        let numeroBruto = rawAddress.street_number || rawAddress.numero || "S/N";
+        const numerosExtraidos = String(numeroBruto).match(/\d+/);
+        const numeroLimpo = numerosExtraidos ? numerosExtraidos[0] : "S/N";
+
+        // C) Monta o Endereço Perfeito para o Banco Central
+        const enderecoFormatado = {
+            zip_code: String(rawAddress.zip_code || rawAddress.cep || "01001000").replace(/\D/g, ''),
+            street_name: rawAddress.street_name || rawAddress.rua || "Não informado",
+            street_number: numeroLimpo,
+            neighborhood: rawAddress.neighborhood || rawAddress.bairro || "Não informado",
+            city: rawAddress.city || rawAddress.cidade || "Não informado",
+            federal_unit: uf.toUpperCase()
+        };
+
+        // =======================================================
+        // 2. MONTAGEM DO PEDIDO
+        // =======================================================
         const cartRes = await pool.query(
             `SELECT c.quantidade, p.nome, p.preco, p.categoria 
              FROM carrinho c JOIN produtos p ON c.produto_id = p.id 
@@ -406,7 +437,6 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
 
         const referenciaExterna = `PEDIDO_USER${req.usuario.id}_${Date.now()}`;
 
-        // Construção Dinâmica e Flexível do Payer
         const paymentBody = {
             transaction_amount: Number(transaction_amount),
             description: 'Pedido - Império Multimarcas',
@@ -420,15 +450,7 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
                 first_name: payer?.first_name || req.body.nome || "Cliente",
                 last_name: payer?.last_name || req.body.sobrenome || "",
                 identification: payer?.identification,
-                // Tenta pegar o endereço do Brick ou dos campos customizados soltos no req.body
-                address: payer?.address || {
-                    zip_code: req.body.cep || "29730000",
-                    street_name: req.body.rua || "Endereço Principal",
-                    street_number: req.body.numero || "S/N",
-                    neighborhood: req.body.bairro || "Centro",
-                    city: req.body.cidade || "Cidade",
-                    federal_unit: req.body.estado || "ES"
-                }
+                address: enderecoFormatado // <--- Injetamos o endereço limpo aqui
             }
         };
 
@@ -443,34 +465,21 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
             requestOptions: { idempotencyKey: chaveIdempotencia }
         });
 
-        // 🚨 2. RAIO-X DO MERCADO PAGO: A resposta brutal e sem filtros da API
-        console.log("\n=======================================================");
-        console.log("📤 RESPOSTA OFICIAL DO MERCADO PAGO:");
-        console.log(`Status: ${payment.status} | Detalhe: ${payment.status_detail}`);
-        // Se o MP enviou avisos sobre o endereço ou CPF, eles estarão aqui:
-        if (payment.api_response) {
-            console.log(JSON.stringify(payment.api_response, null, 2));
-        }
-        console.log("=======================================================\n");
-
         if (payment.status === 'approved' || payment.status === 'in_process' || payment.status === 'pending') {
-        // ... (mantenha o restante do código igual) ...
             
             let pixResponse = null;
             let boletoResponse = null;
 
-            // Tratamento Específico para Pix
             if (payment.payment_method_id === 'pix' && payment.point_of_interaction) {
                 pixResponse = {
                     qr_code: payment.point_of_interaction.transaction_data.qr_code,
                     qr_code_base64: payment.point_of_interaction.transaction_data.qr_code_base64
                 };
             } 
-            // Tratamento Específico para Boleto (Ticket)
             else if (payment.payment_type_id === 'ticket') {
                 boletoResponse = {
-                    url: payment.transaction_details?.external_resource_url, // Link do PDF do Boleto Real
-                    linha_digitavel: payment.barcode?.content // Código de barras
+                    url: payment.transaction_details?.external_resource_url, 
+                    linha_digitavel: payment.barcode?.content 
                 };
             }
 
@@ -480,7 +489,7 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
                 status: payment.status, 
                 metodo: payment.payment_method_id,
                 pix: pixResponse,
-                boleto: boletoResponse // Envia o boleto para o Frontend montar o botão de Download
+                boleto: boletoResponse
             });
         } else {
             res.status(400).json({ erro: `Recusado: ${payment.status_detail}` });
