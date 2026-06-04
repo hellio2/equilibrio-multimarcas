@@ -292,6 +292,20 @@ app.post('/api/frete', async (req, res) => {
 app.get('/api/config/mp', (req, res) => {
     res.json({ publicKey: process.env.MP_PUBLIC_KEY });
 });
+
+// =========================================================
+// ROTA DE WEBHOOK (NOTIFICAÇÕES DO MERCADO PAGO)
+// =========================================================
+app.post('/api/webhook', (req, res) => {
+    // O Mercado Pago vai enviar "avisos" para esta rota automaticamente.
+    // Retornar 200 OK imediatamente é uma exigência deles.
+    res.status(200).send('OK');
+    
+    // Aqui no futuro você pode programar a lógica de atualizar o status do pedido 
+    // no banco de dados de "Pendente" para "Aprovado" quando o Pix for pago.
+    console.log("🔔 Webhook Recebido do MP:", req.query);
+});
+
 /*
 // =========================================================
 // ROTA DE PAGAMENTO (CHECKOUT BRICKS TRANPARENTE) -- TESTE
@@ -366,22 +380,42 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
 app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
     try {
         const client = new Payment(clienteMercadoPago);
-        
-        // Pega todos os dados REAIS enviados pelo Checkout Bricks
         const { transaction_amount, token, installments, payment_method_id, issuer_id, payer } = req.body;
 
+        // 1. Busca os itens do carrinho no banco para enviar ao MP (Melhora Antifraude)
+        const cartRes = await pool.query(
+            `SELECT c.quantidade, p.nome, p.preco, p.categoria 
+             FROM carrinho c JOIN produtos p ON c.produto_id = p.id 
+             WHERE c.usuario_id = $1`, [req.usuario.id]
+        );
+
+        const itensDoCarrinho = cartRes.rows.map(item => ({
+            title: item.nome,
+            description: `Compra de ${item.nome} no Império Multimarcas`, // Atende o requisito "Descrição do item"
+            category_id: item.categoria || "fashion",
+            quantity: Number(item.quantidade),
+            unit_price: Number(item.preco)
+        }));
+
+        // 2. Gera uma referência externa única (Atende o requisito "Referência Externa")
+        const referenciaExterna = `PEDIDO_USER${req.usuario.id}_${Date.now()}`;
+
+        // 3. Monta o Payload Nível Máximo de Qualidade
         const paymentBody = {
             transaction_amount: Number(transaction_amount),
             description: 'Pedido - Império Multimarcas',
+            statement_descriptor: 'IMPERIOMULTI', // Atende o requisito "Fatura do Cartão"
+            external_reference: referenciaExterna, 
+            notification_url: 'https://imperio-multimarcas.onrender.com/api/webhook', // Atende o requisito "Webhooks"
             payment_method_id: payment_method_id,
+            additional_info: {
+                items: itensDoCarrinho
+            },
             payer: {
-                // Pega o e-mail real da conta logada no site ou o digitado no Brick
                 email: req.usuario.email || payer?.email,
                 first_name: payer?.first_name,
                 last_name: payer?.last_name,
                 identification: payer?.identification,
-                // O Brick coleta o endereço para boletos automaticamente.
-                // Mantemos um fallback genérico apenas por segurança para não travar a API.
                 address: payer?.address || {
                     zip_code: "01001000",
                     street_name: "Não informado",
@@ -393,17 +427,13 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
             }
         };
 
-        // Adiciona dados de cartão somente se o cliente escolheu cartão
         if (token) paymentBody.token = token;
         if (installments) paymentBody.installments = Number(installments);
         if (issuer_id) paymentBody.issuer_id = issuer_id;
 
         const payment = await client.create({ body: paymentBody });
 
-        // Verifica o status real
         if (payment.status === 'approved' || payment.status === 'in_process' || payment.status === 'pending') {
-            
-            // CAPTURA DE DADOS DO PIX
             let pixResponse = null;
             if (payment.payment_method_id === 'pix' && payment.point_of_interaction) {
                 pixResponse = {
@@ -419,14 +449,13 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
                 metodo: payment.payment_method_id,
                 pix: pixResponse 
             });
-
         } else {
             res.status(400).json({ erro: `Recusado: ${payment.status_detail}` });
         }
 
     } catch (err) {
         console.error("Erro no Processamento do Brick:", err.message || err);
-        res.status(500).json({ erro: 'Erro interno ao processar o pagamento. Verifique o terminal.' });
+        res.status(500).json({ erro: 'Erro interno ao processar o pagamento.' });
     }
 });
 
