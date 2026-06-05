@@ -375,56 +375,15 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
 */
 
 // =========================================================
-// ROTA DE PAGAMENTO (CHECKOUT BRICKS - HIPER RAIO-X PRODUÇÃO)
+// ROTA DE PAGAMENTO (CHECKOUT BRICKS TRANPARENTE - PRODUÇÃO)
 // =========================================================
 app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
     try {
         const client = new Payment(clienteMercadoPago);
+        
+        // Pega todos os dados do corpo da requisição (do Brick e dos inputs manuais)
         const { transaction_amount, token, installments, payment_method_id, issuer_id, payer } = req.body;
 
-        // 🚨 LOG 1: MONITORAMENTO DE INPUT DO FRONTEND
-        console.log("\n=======================================================");
-        console.log("📥 [RAIO-X FRONTEND] PAYLOAD BRUTO DO BRICK:");
-        console.log(JSON.stringify(req.body, null, 2));
-        console.log("=======================================================\n");
-
-        // 1. Sanitização Robusta de Endereço e Dados Cadastrais
-        const rawAddress = payer?.address || req.body;
-        
-        let uf = rawAddress.federal_unit || rawAddress.estado || "SP";
-        const estadosBR = {
-            "acre": "AC", "alagoas": "AL", "amapá": "AP", "amazonas": "AM", "bahia": "BA",
-            "ceará": "CE", "distrito federal": "DF", "espírito santo": "ES", "goiás": "GO",
-            "maranhão": "MA", "mato grosso": "MT", "mato grosso do sul": "MS", "minas gerais": "MG",
-            "pará": "PA", "paraíba": "PB", "paraná": "PR", "pernambuco": "PE", "piauí": "PI",
-            "rio de janeiro": "RJ", "rio grande do norte": "RN", "rio grande do sul": "RS",
-            "rondônia": "RO", "roraima": "RR", "santa catarina": "SC", "são paulo": "SP",
-            "sergipe": "SE", "tocantins": "TO"
-        };
-        if (uf.length > 2) {
-            uf = estadosBR[uf.toLowerCase().trim()] || uf.substring(0, 2).toUpperCase();
-        }
-
-        let numeroBruto = rawAddress.street_number || rawAddress.numero || "S/N";
-        const numerosExtraidos = String(numeroBruto).match(/\d+/);
-        const numeroLimpo = numerosExtraidos ? numerosExtraidos[0] : "1";
-
-        const enderecoFormatado = {
-            zip_code: String(rawAddress.zip_code || rawAddress.cep || "01001000").replace(/\D/g, ''),
-            street_name: String(rawAddress.street_name || rawAddress.rua || "Rua Principal").trim(),
-            street_number: numeroLimpo,
-            neighborhood: String(rawAddress.neighborhood || rawAddress.bairro || "Centro").trim(),
-            city: String(rawAddress.city || rawAddress.cidade || "Cidade").trim(),
-            federal_unit: uf.toUpperCase().trim()
-        };
-
-        // Separando Nome e Sobrenome de forma segura
-        const nomeCompleto = (payer?.first_name || req.body.nome || "Cliente Teste").trim();
-        const partesNome = nomeCompleto.split(" ");
-        const firstName = partesNome[0];
-        const lastName = partesNome.slice(1).join(" ") || "Silva";
-
-        // 2. Busca e montagem do carrinho
         const cartRes = await pool.query(
             `SELECT c.quantidade, p.nome, p.preco, p.categoria 
              FROM carrinho c JOIN produtos p ON c.produto_id = p.id 
@@ -433,7 +392,7 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
 
         const itensDoCarrinho = cartRes.rows.map(item => ({
             title: item.nome,
-            description: `Roupas - ${item.nome}`,
+            description: `Compra de ${item.nome} no Império Multimarcas`,
             category_id: item.categoria || "fashion",
             quantity: Number(item.quantidade),
             unit_price: Number(item.preco)
@@ -441,7 +400,7 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
 
         const referenciaExterna = `PEDIDO_USER${req.usuario.id}_${Date.now()}`;
 
-        // 3. Montagem do Payload Final estruturando os nós adicionais exigidos contra fraude
+        // Construção Dinâmica e Flexível do Payer
         const paymentBody = {
             transaction_amount: Number(transaction_amount),
             description: 'Pedido - Império Multimarcas',
@@ -449,39 +408,27 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
             external_reference: referenciaExterna, 
             notification_url: 'https://imperio-multimarcas.onrender.com/api/webhook',
             payment_method_id: payment_method_id,
-            additional_info: { 
-                items: itensDoCarrinho,
-                payer: {
-                    first_name: firstName,
-                    last_name: lastName,
-                    address: {
-                        zip_code: enderecoFormatado.zip_code,
-                        street_name: enderecoFormatado.street_name,
-                        street_number: Number(enderecoFormatado.street_number)
-                    }
-                }
-            },
+            additional_info: { items: itensDoCarrinho },
             payer: {
-                email: (req.usuario.email || payer?.email || "cliente@email.com").trim(),
-                first_name: firstName,
-                last_name: lastName,
-                identification: {
-                    type: payer?.identification?.type || "CPF",
-                    number: String(payer?.identification?.number || "").replace(/\D/g, '')
-                },
-                address: enderecoFormatado
+                email: req.usuario.email || payer?.email,
+                first_name: payer?.first_name || req.body.nome || "Cliente",
+                last_name: payer?.last_name || req.body.sobrenome || "",
+                identification: payer?.identification,
+                // Tenta pegar o endereço do Brick ou dos campos customizados soltos no req.body
+                address: payer?.address || {
+                    zip_code: req.body.cep || "29730000",
+                    street_name: req.body.rua || "Endereço Principal",
+                    street_number: req.body.numero || "S/N",
+                    neighborhood: req.body.bairro || "Centro",
+                    city: req.body.cidade || "Cidade",
+                    federal_unit: req.body.estado || "ES"
+                }
             }
         };
 
         if (token) paymentBody.token = token;
         if (installments) paymentBody.installments = Number(installments);
         if (issuer_id) paymentBody.issuer_id = issuer_id;
-
-        // 🚨 LOG 2: MONITORAMENTO DO PAYLOAD TRATADO ANTES DO ENVIO
-        console.log("\n=======================================================");
-        console.log("📤 [RAIO-X BACKEND] PAYLOAD SANITIZADO INDO PARA O MP:");
-        console.log(JSON.stringify(paymentBody, null, 2));
-        console.log("=======================================================\n");
 
         const chaveIdempotencia = `IDEMP_${req.usuario.id}_${Date.now()}`;
 
@@ -490,31 +437,23 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
             requestOptions: { idempotencyKey: chaveIdempotencia }
         });
 
-        // 🚨 LOG 3: RESPOSTA CRUA DO MERCADO PAGO DO SEU AMBIENTE
-        console.log("\n=======================================================");
-        console.log("💥 [RAIO-X MERCADO PAGO] RESPOSTA COMPLETA DA FINANCIAL:");
-        console.log(`Status Obtido: ${payment.status}`);
-        console.log(`Detalhe do Status: ${payment.status_detail}`);
-        if (payment.api_response) {
-            console.log("Corpo de Resposta do Servidor do MP:");
-            console.log(JSON.stringify(payment.api_response, null, 2));
-        }
-        console.log("=======================================================\n");
-
         if (payment.status === 'approved' || payment.status === 'in_process' || payment.status === 'pending') {
+            
             let pixResponse = null;
             let boletoResponse = null;
 
+            // Tratamento Específico para Pix
             if (payment.payment_method_id === 'pix' && payment.point_of_interaction) {
                 pixResponse = {
                     qr_code: payment.point_of_interaction.transaction_data.qr_code,
                     qr_code_base64: payment.point_of_interaction.transaction_data.qr_code_base64
                 };
             } 
+            // Tratamento Específico para Boleto (Ticket)
             else if (payment.payment_type_id === 'ticket') {
                 boletoResponse = {
-                    url: payment.transaction_details?.external_resource_url, 
-                    linha_digitavel: payment.barcode?.content 
+                    url: payment.transaction_details?.external_resource_url, // Link do PDF do Boleto Real
+                    linha_digitavel: payment.barcode?.content // Código de barras
                 };
             }
 
@@ -524,16 +463,14 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
                 status: payment.status, 
                 metodo: payment.payment_method_id,
                 pix: pixResponse,
-                boleto: boletoResponse
+                boleto: boletoResponse // Envia o boleto para o Frontend montar o botão de Download
             });
         } else {
             res.status(400).json({ erro: `Recusado: ${payment.status_detail}` });
         }
 
     } catch (err) {
-        console.error("\n❌ [RAIO-X ERROR] FALHA CRÍTICA NO CATCH DA ROTA:");
-        console.error(err.message || err);
-        if (err.cause) console.error("Causa:", JSON.stringify(err.cause, null, 2));
+        console.error("Erro no Processamento do Brick:", err.message || err);
         res.status(500).json({ erro: 'Erro interno ao processar o pagamento.' });
     }
 });
