@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Equilíbrio Multimarcas | Meus Favoritos</title>
+    <title>Fale Conosco | Equilíbrio Multimarcas</title>
     <link rel="stylesheet" href="css/variaveis.css">
     <link rel="stylesheet" href="css/estilos.css">
     <link rel="stylesheet" href="css/componentes/home.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
 </head>
-<body>
+<body style="background: #f4f6f9;">
     <header>
         <div class="header-container">
             <div class="logo">
@@ -19,14 +19,13 @@
             <nav class="nav-menu">
                 <a href="index.html">Home</a>
                 <a href="produtos.html">Produtos</a>
-                <a href="favoritos.html" class="active">Favoritos</a>
+                <a href="favoritos.html">Favoritos</a>
             </nav>
             <div class="header-actions">
                 <div class="search-bar">
                     <input type="text" placeholder="Buscar no Equilíbrio...">
                     <i class="fas fa-search"></i>
                 </div>
-                <!-- O botão de admin será injetado dinamicamente aqui dentro se o usuário for qualificado -->
                 <div id="menu-admin-container"></div>
                 <a href="favoritos.html" class="action-icon">
                     <i class="fas fa-heart"></i>
@@ -44,13 +43,35 @@
         </div>
     </header>
 
-    <main class="section-container" style="margin-top: 40px;">
-        <div class="section-header">
-            <h2>Meus <span>Favoritos</span></h2>
-        </div>
-
-        <div class="products-grid" id="favorites-page-grid">
+    <main style="padding: 20px;">
+        <div style="max-width: 600px; margin: 40px auto; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+            <h1 style="font-weight: 900; text-transform: uppercase;">Fale <span>Conosco</span></h1>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            
+            <div style="display: flex; flex-direction: column; gap: 20px; margin-bottom: 30px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <i class="fab fa-whatsapp" style="font-size: 2rem; color: #25d366;"></i>
+                    <div>
+                        <strong>WhatsApp Suporte:</strong>
+                        <p style="color: #555; margin: 0;">(27) 99999-9999 (Seg à Sex, 9h às 18h)</p>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <i class="far fa-envelope" style="font-size: 2rem; color: #111;"></i>
+                    <div>
+                        <strong>E-mail Comercial:</strong>
+                        <p style="color: #555; margin: 0;">suporte@equilibriomultimarcas.com</p>
+                    </div>
+                </div>
             </div>
+
+            <form onsubmit="event.preventDefault(); mostrarNotificacao('Mensagem enviada com sucesso! Responderemos em até 24 horas.'); this.reset();">
+                <input type="text" placeholder="Seu Nome" required style="width:100%; padding:12px; margin-bottom:15px; border:1px solid #ddd; border-radius:4px; font-family: 'Montserrat', sans-serif;">
+                <input type="email" placeholder="Seu E-mail" required style="width:100%; padding:12px; margin-bottom:15px; border:1px solid #ddd; border-radius:4px; font-family: 'Montserrat', sans-serif;">
+                <textarea placeholder="Como podemos te ajudar?" rows="4" required style="width:100%; padding:12px; margin-bottom:15px; border:1px solid #ddd; border-radius:4px; resize:none; font-family: 'Montserrat', sans-serif;"></textarea>
+                <button type="submit" class="hero-btn" style="width:100%; margin: 0; padding:15px; border:none; cursor:pointer;">Enviar Mensagem</button>
+            </form>
+        </div>
     </main>
 
     <footer>
@@ -89,10 +110,7 @@
 
     <script src="js/main.js"></script>
     <script src="js/favoritos.js"></script>
-    <script src="js/carrinho.js"></script>
-
     <div id="toast-container" class="toast-container"></div>
-
     <div class="cart-overlay" id="cart-overlay"></div>
     <div class="cart-drawer" id="cart-drawer">
         <div class="cart-drawer-header">

@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Equilíbrio Multimarcas | Meus Favoritos</title>
+    <title>Sobre Nós | Equilíbrio Multimarcas</title>
     <link rel="stylesheet" href="css/variaveis.css">
     <link rel="stylesheet" href="css/estilos.css">
     <link rel="stylesheet" href="css/componentes/home.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
 </head>
-<body>
+<body style="background: #f4f6f9;">
+    <!-- CABEÇALHO PADRÃO -->
     <header>
         <div class="header-container">
             <div class="logo">
@@ -19,14 +20,13 @@
             <nav class="nav-menu">
                 <a href="index.html">Home</a>
                 <a href="produtos.html">Produtos</a>
-                <a href="favoritos.html" class="active">Favoritos</a>
+                <a href="favoritos.html">Favoritos</a>
             </nav>
             <div class="header-actions">
                 <div class="search-bar">
                     <input type="text" placeholder="Buscar no Equilíbrio...">
                     <i class="fas fa-search"></i>
                 </div>
-                <!-- O botão de admin será injetado dinamicamente aqui dentro se o usuário for qualificado -->
                 <div id="menu-admin-container"></div>
                 <a href="favoritos.html" class="action-icon">
                     <i class="fas fa-heart"></i>
@@ -44,15 +44,16 @@
         </div>
     </header>
 
-    <main class="section-container" style="margin-top: 40px;">
-        <div class="section-header">
-            <h2>Meus <span>Favoritos</span></h2>
+    <main style="padding: 20px;">
+        <div style="max-width: 800px; margin: 40px auto; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+            <h1 style="font-weight: 900; text-transform: uppercase;">Nossa <span>História</span></h1>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="line-height: 1.8; margin-bottom: 15px; color: #444;">A <strong>Equilíbrio Multimarcas</strong> nasceu da paixão pela cultura urbana e pela necessidade de trazer o verdadeiro conceito de Streetwear Premium para o mercado. Nosso propósito é vestir aqueles que enxergam a moda como uma forma de expressão autêntica e sem limites nas ruas.</p>
+            <p style="line-height: 1.8; color: #444;">Trabalhamos exclusivamente com peças selecionadas, tecidos de altíssima gramatura e acabamentos impecáveis, garantindo o equilíbrio perfeito entre o conforto diário e a exclusividade de um drop de luxo.</p>
         </div>
-
-        <div class="products-grid" id="favorites-page-grid">
-            </div>
     </main>
 
+    <!-- RODAPÉ PADRÃO -->
     <footer>
         <div class="footer-container">
             <div class="footer-brand">
@@ -87,9 +88,9 @@
         </div>
     </footer>
 
+    <!-- SCRIPTS E CARRINHO LATERAL -->
     <script src="js/main.js"></script>
     <script src="js/favoritos.js"></script>
-    <script src="js/carrinho.js"></script>
 
     <div id="toast-container" class="toast-container"></div>
 
