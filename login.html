@@ -62,22 +62,114 @@
                         <button type="submit" class="auth-btn">Acessar Conta</button>
                     </form>
 
-                    <form id="form-cadastro" class="auth-form">
+                    <form id="form-cadastro" class="auth-form" style="width: 100%; max-width: 650px; margin: 0 auto;">
                         <div id="feedback-cadastro" class="form-feedback"></div>
-                        <div class="form-control">
+                        
+                        <h4 style="margin: 20px 0 15px 0; font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase; color: #777; border-bottom: 2px solid #f0f0f0; padding-bottom: 6px; font-weight: 700;">
+                            <i class="fas fa-user-circle" style="margin-right: 6px;"></i> Dados Pessoais
+                        </h4>
+                        
+                        <div class="form-control" style="margin-bottom: 15px;">
                             <label for="cad-nome">Nome Completo</label>
-                            <input type="text" id="cad-nome" required placeholder="João Silva">
+                            <input type="text" id="cad-nome" required placeholder="João Silva" style="width: 100%; box-sizing: border-box;">
                         </div>
-                        <div class="form-control">
-                            <label for="cad-email">E-mail</label>
-                            <input type="email" id="cad-email" required placeholder="seu@email.com">
+                        
+                        <div style="display: block; margin-bottom: 0;">
+                            <div style="display: table; width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 15px 0; margin-left: -15px; width: calc(100% + 30px);">
+                                <div style="display: table-cell; width: 50%; padding-bottom: 15px; vertical-align: top;">
+                                    <div class="form-control">
+                                        <label for="cad-email">E-mail</label>
+                                        <input type="email" id="cad-email" required placeholder="seu@email.com" style="width: 100%; box-sizing: border-box;">
+                                    </div>
+                                </div>
+                                <div style="display: table-cell; width: 50%; padding-bottom: 15px; vertical-align: top;">
+                                    <div class="form-control">
+                                        <label for="cad-telefone">Telefone / WhatsApp</label>
+                                        <input type="text" id="cad-telefone" required placeholder="(00) 00000-0000" style="width: 100%; box-sizing: border-box;">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-control">
+                        
+                        <div class="form-control" style="margin-bottom: 25px;">
                             <label for="cad-senha">Senha Segura</label>
-                            <input type="password" id="cad-senha" required placeholder="Mínimo de 6 caracteres">
+                            <input type="password" id="cad-senha" required placeholder="Mínimo de 6 caracteres" style="width: 100%; box-sizing: border-box;">
                         </div>
-                        <button type="submit" class="auth-btn">Cadastrar</button>
+
+                        <h4 style="margin: 25px 0 15px 0; font-size: 0.85rem; letter-spacing: 1px; text-transform: uppercase; color: #777; border-bottom: 2px solid #f0f0f0; padding-bottom: 6px; font-weight: 700;">
+                            <i class="fas fa-map-marker-alt" style="margin-right: 6px;"></i> Endereço de Entrega
+                        </h4>
+                        
+                        <div class="form-control" style="margin-bottom: 15px;">
+                            <label for="cad-cep">CEP</label>
+                            <input type="text" id="cad-cep" required placeholder="00000-000" onblur="buscarCepCadastro()" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        
+                        <div class="form-control" style="margin-bottom: 15px;">
+                            <label for="cad-logradouro">Rua / Avenida</label>
+                            <input type="text" id="cad-logradouro" required placeholder="Ex: Av. Paulista" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        
+                        <div style="display: block; margin-bottom: 0;">
+                            <div style="display: table; width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 15px 0; margin-left: -15px; width: calc(100% + 30px);">
+                                <div style="display: table-cell; width: 40%; padding-bottom: 15px; vertical-align: top;">
+                                    <div class="form-control">
+                                        <label for="cad-numero">Número</label>
+                                        <input type="text" id="cad-numero" required placeholder="Ex: 1000" style="width: 100%; box-sizing: border-box;">
+                                    </div>
+                                </div>
+                                <div style="display: table-cell; width: 60%; padding-bottom: 15px; vertical-align: top;">
+                                    <div class="form-control">
+                                        <label for="cad-complemento">Complemento</label>
+                                        <input type="text" id="cad-complemento" placeholder="Apto, Bloco..." style="width: 100%; box-sizing: border-box;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-control" style="margin-bottom: 15px;">
+                            <label for="cad-bairro">Bairro</label>
+                            <input type="text" id="cad-bairro" required placeholder="Ex: Centro" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        
+                        <div style="display: block; margin-bottom: 0;">
+                            <div style="display: table; width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 15px 0; margin-left: -15px; width: calc(100% + 30px);">
+                                <div style="display: table-cell; width: 75%; padding-bottom: 15px; vertical-align: top;">
+                                    <div class="form-control">
+                                        <label for="cad-cidade">Cidade</label>
+                                        <input type="text" id="cad-cidade" required placeholder="Ex: São Paulo" style="width: 100%; box-sizing: border-box;">
+                                    </div>
+                                </div>
+                                <div style="display: table-cell; width: 25%; padding-bottom: 15px; vertical-align: top;">
+                                    <div class="form-control">
+                                        <label for="cad-estado">UF</label>
+                                        <input type="text" id="cad-estado" required maxlength="2" placeholder="SP" style="width: 100%; box-sizing: border-box; text-transform: uppercase;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="auth-btn" style="margin-top: 25px; width: 100%; padding: 14px; font-weight: bold; font-size: 1rem;">Finalizar Cadastro</button>
                     </form>
+
+                    <script>
+                    async function buscarCepCadastro() {
+                        const cep = document.getElementById('cad-cep').value.replace(/\D/g, '');
+                        if (cep.length === 8) {
+                            try {
+                                const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                                const dados = await res.json();
+                                if (!dados.erro) {
+                                    document.getElementById('cad-logradouro').value = dados.logradouro;
+                                    document.getElementById('cad-bairro').value = dados.bairro;
+                                    document.getElementById('cad-cidade').value = dados.localidade;
+                                    document.getElementById('cad-estado').value = dados.uf;
+                                    document.getElementById('cad-numero').focus(); 
+                                }
+                            } catch(e) { console.error("Erro ao buscar CEP", e); }
+                        }
+                    }
+                    </script>
                 </div>
             </div>
 

@@ -63,9 +63,23 @@
                 <div id="frete-resultados" class="frete-options"></div>
             </div>
 
+            <!-- SESSÃO DE ENDEREÇO DE ENTREGA -->
+            <div style="border-top: 1px solid #eee; padding-top: 30px; margin-bottom: 30px;">
+                <h4 style="margin-bottom: 15px; text-transform: uppercase; font-size: 0.9rem;">2. Endereço de Entrega</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <input type="text" id="envio-cep" placeholder="CEP" onblur="buscarCep('envio-cep', 'envio-logradouro', 'envio-bairro', 'envio-cidade', 'envio-estado')" style="padding: 12px; border: 1px solid #ccc; border-radius: 4px; grid-column: 1 / -1;">
+                    <input type="text" id="envio-logradouro" placeholder="Rua / Avenida" style="padding: 12px; border: 1px solid #ccc; border-radius: 4px; grid-column: 1 / -1;">
+                    <input type="text" id="envio-numero" placeholder="Número" style="padding: 12px; border: 1px solid #ccc; border-radius: 4px;">
+                    <input type="text" id="envio-complemento" placeholder="Complemento" style="padding: 12px; border: 1px solid #ccc; border-radius: 4px;">
+                    <input type="text" id="envio-bairro" placeholder="Bairro" style="padding: 12px; border: 1px solid #ccc; border-radius: 4px;">
+                    <input type="text" id="envio-cidade" placeholder="Cidade" style="padding: 12px; border: 1px solid #ccc; border-radius: 4px;">
+                    <input type="text" id="envio-estado" placeholder="UF" style="padding: 12px; border: 1px solid #ccc; border-radius: 4px;">
+                </div>
+            </div>
+
             <!-- SESSÃO DE PAGAMENTO HÍBRIDO -->
             <div style="border-top: 1px solid #eee; padding-top: 30px;">
-                <h4 style="margin-bottom: 15px; text-transform: uppercase; font-size: 0.9rem;">2. Escolha o Pagamento</h4>
+                <h4 style="margin-bottom: 15px; text-transform: uppercase; font-size: 0.9rem;">3. Escolha o Pagamento</h4>
                 
                 <!-- MENU DE ABAS -->
                 <div class="tabs">
@@ -298,3 +312,39 @@
     </script>
 </body>
 </html>
+
+<script>
+    // Puxa o endereço salvo do banco ao abrir o checkout
+    document.addEventListener("DOMContentLoaded", async () => {
+        const token = localStorage.getItem('equilibrio_token');
+        if(token) {
+            try {
+                const res = await fetch('/api/usuario/perfil', { headers: { 'Authorization': `Bearer ${token}` } });
+                const perfil = await res.json();
+                
+                document.getElementById('envio-cep').value = perfil.cep || '';
+                document.getElementById('envio-logradouro').value = perfil.logradouro || '';
+                document.getElementById('envio-numero').value = perfil.numero || '';
+                document.getElementById('envio-complemento').value = perfil.complemento || '';
+                document.getElementById('envio-bairro').value = perfil.bairro || '';
+                document.getElementById('envio-cidade').value = perfil.cidade || '';
+                document.getElementById('envio-estado').value = perfil.estado || '';
+            } catch(e) {}
+        }
+    });
+
+    // Script do ViaCEP para o Checkout
+    async function buscarCep(idCep, idLog, idBairro, idCidade, idEstado) {
+        const cep = document.getElementById(idCep).value.replace(/\D/g, '');
+        if (cep.length === 8) {
+            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+            const dados = await res.json();
+            if (!dados.erro) {
+                document.getElementById(idLog).value = dados.logradouro;
+                document.getElementById(idBairro).value = dados.bairro;
+                document.getElementById(idCidade).value = dados.localidade;
+                document.getElementById(idEstado).value = dados.uf;
+            }
+        }
+    }
+</script>

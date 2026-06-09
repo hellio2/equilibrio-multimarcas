@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Conta | Equilíbrio Multimarcas</title>
+    <link rel="stylesheet" href="css/variaveis.css">
+    <link rel="stylesheet" href="css/estilos.css">
+    <link rel="stylesheet" href="css/componentes/home.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        .conta-container { max-width: 1000px; margin: 40px auto; display: flex; gap: 30px; padding: 0 20px; }
+        .conta-menu { flex: 1; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); height: fit-content; }
+        .conta-menu button { display: block; width: 100%; text-align: left; padding: 15px; background: none; border: none; border-bottom: 1px solid #eee; font-weight: 600; cursor: pointer; color: #555; transition: 0.3s; }
+        .conta-menu button.active, .conta-menu button:hover { color: #111; padding-left: 20px; border-left: 3px solid #111; }
+        .conta-content { flex: 3; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .tab-panel { display: none; animation: fadeIn 0.4s; }
+        .tab-panel.active { display: block; }
+        
+        /* Formulário */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .form-grid input { padding: 12px; border: 1px solid #ccc; border-radius: 4px; font-family: 'Montserrat', sans-serif; width: 100%; box-sizing: border-box; }
+        .full-width { grid-column: 1 / -1; }
+        
+        /* Pedidos */
+        .pedido-card { border: 1px solid #eee; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .pedido-header { display: flex; justify-content: space-between; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 15px; font-weight: bold; }
+        .status-badge { padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; background: #e3f2fd; color: #0d47a1; }
+        .status-badge.Aprovado { background: #e8f5e9; color: #2e7d32; }
+    </style>
+</head>
+<body style="background: #f4f6f9;">
+    <header>
+        <div class="header-container">
+            <div class="logo">
+                <a href="index.html">Equilíbrio<span>.</span></a>
+            </div>
+            <nav class="nav-menu">
+                <a href="index.html" class="active">Home</a>
+                <a href="produtos.html">Produtos</a>
+                <a href="favoritos.html">Favoritos</a>
+            </nav>
+            <div class="header-actions">
+                <div class="search-bar">
+                    <input type="text" placeholder="Buscar no Equilíbrio...">
+                    <i class="fas fa-search"></i>
+                </div>
+                <!-- O botão de admin será injetado dinamicamente aqui dentro se o usuário for qualificado -->
+                <div id="menu-admin-container"></div>
+                <a href="favoritos.html" class="action-icon">
+                    <i class="fas fa-heart"></i>
+                    <span class="badge" id="fav-badge">0</span>
+                </a>
+                <a href="#" class="action-icon open-cart">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span class="badge" id="cart-badge">0</span>
+                </a>
+                <a href="login.html" class="action-icon">
+                    <i class="fas fa-user"></i>
+                </a>
+                <i class="fas fa-bars menu-toggle"></i>
+            </div>
+        </div>
+    </header>
+
+    <main class="conta-container">
+        <aside class="conta-menu">
+            <h3 style="margin-bottom: 20px; text-transform: uppercase;">Minha Conta</h3>
+            <button class="active" onclick="mudarAbaConta('pedidos')"><i class="fas fa-box"></i> Meus Pedidos</button>
+            <button onclick="mudarAbaConta('perfil')"><i class="fas fa-user-edit"></i> Meus Dados</button>
+            <button onclick="sairConta()" style="color: #dc3545; border-bottom: none;"><i class="fas fa-sign-out-alt"></i> Sair</button>
+        </aside>
+
+        <section class="conta-content">
+            <!-- ABA PEDIDOS -->
+            <div id="aba-pedidos" class="tab-panel active">
+                <h2 style="margin-bottom: 20px; font-weight: 900; text-transform: uppercase;">Meus Pedidos</h2>
+                <div id="lista-pedidos">
+                    <p style="text-align: center; color: #666;"><i class="fas fa-spinner fa-spin"></i> Carregando...</p>
+                </div>
+            </div>
+
+            <!-- ABA PERFIL -->
+            <div id="aba-perfil" class="tab-panel">
+                <h2 style="margin-bottom: 20px; font-weight: 900; text-transform: uppercase;">Meus Dados</h2>
+                <form id="form-perfil" class="form-grid" onsubmit="atualizarPerfil(event)">
+                    <input type="text" id="p-nome" placeholder="Nome Completo" required class="full-width">
+                    <input type="text" id="p-telefone" placeholder="Telefone / WhatsApp">
+                    <input type="text" id="p-cep" placeholder="CEP" onblur="buscarCep('p-cep', 'p-logradouro', 'p-bairro', 'p-cidade', 'p-estado')">
+                    <input type="text" id="p-logradouro" placeholder="Endereço / Rua" class="full-width">
+                    <input type="text" id="p-numero" placeholder="Número">
+                    <input type="text" id="p-complemento" placeholder="Complemento (Apto, Bloco)">
+                    <input type="text" id="p-bairro" placeholder="Bairro">
+                    <input type="text" id="p-cidade" placeholder="Cidade">
+                    <input type="text" id="p-estado" placeholder="Estado (UF)" maxlength="2">
+                    <button type="submit" class="hero-btn full-width" style="margin-top: 10px;">Salvar Alterações</button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="footer-container">
+            <div class="footer-brand">
+                <div class="logo"><a href="index.html">Equilíbrio<span>.</span></a></div>
+                <p>A marca definitiva de Streetwear Premium. Elevando o seu estilo diário ao nível máximo de exclusividade.</p>
+                <div class="social-icons">
+                    <a href="#"><i class="fab fa-instagram"></i></a>
+                    <a href="#"><i class="fab fa-facebook-f"></i></a>
+                    <a href="#"><i class="fab fa-tiktok"></i></a>
+                </div>
+            </div>
+            <div class="footer-links">
+                <h4>Navegação</h4>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="produtos.html">Produtos</a></li>
+                    <li><a href="favoritos.html">Favoritos</a></li>
+                </ul>
+            </div>
+            <div class="footer-links">
+                <h4>Institucional e Suporte</h4>
+                <ul>
+                    <li><a href="sobre.html">Sobre Nós</a></li>
+                    <li><a href="contato.html">Fale Conosco</a></li>
+                    <li><a href="trocas.html">Políticas de Troca</a></li>
+                    <li><a href="privacidade.html">Política de Privacidade</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2026 Equilíbrio Multimarcas. Todos os direitos reservados. Desenvolvido com foco em exclusividade.</p>
+        </div>
+    </footer>
+
+    <script>
+        const token = localStorage.getItem('equilibrio_token');
+        if (!token) window.location.href = 'login.html';
+
+        function mudarAbaConta(aba) {
+            document.querySelectorAll('.conta-menu button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            document.getElementById('aba-' + aba).classList.add('active');
+        }
+
+        function sairConta() {
+            localStorage.removeItem('equilibrio_token');
+            localStorage.removeItem('equilibrio_usuario');
+            window.location.href = 'index.html';
+        }
+
+        // Função ViaCEP Global
+        async function buscarCep(idCep, idLog, idBairro, idCidade, idEstado) {
+            const cep = document.getElementById(idCep).value.replace(/\D/g, '');
+            if (cep.length === 8) {
+                try {
+                    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                    const dados = await res.json();
+                    if (!dados.erro) {
+                        document.getElementById(idLog).value = dados.logradouro;
+                        document.getElementById(idBairro).value = dados.bairro;
+                        document.getElementById(idCidade).value = dados.localidade;
+                        document.getElementById(idEstado).value = dados.uf;
+                    }
+                } catch(e) {}
+            }
+        }
+
+        async function carregarDados() {
+            // 1. Carrega Perfil
+            const resPerfil = await fetch('/api/usuario/perfil', { headers: { 'Authorization': `Bearer ${token}` } });
+            const perfil = await resPerfil.json();
+            document.getElementById('p-nome').value = perfil.nome || '';
+            document.getElementById('p-telefone').value = perfil.telefone || '';
+            document.getElementById('p-cep').value = perfil.cep || '';
+            document.getElementById('p-logradouro').value = perfil.logradouro || '';
+            document.getElementById('p-numero').value = perfil.numero || '';
+            document.getElementById('p-complemento').value = perfil.complemento || '';
+            document.getElementById('p-bairro').value = perfil.bairro || '';
+            document.getElementById('p-cidade').value = perfil.cidade || '';
+            document.getElementById('p-estado').value = perfil.estado || '';
+
+            // 2. Carrega Pedidos
+            const resPedidos = await fetch('/api/meus-pedidos', { headers: { 'Authorization': `Bearer ${token}` } });
+            const pedidos = await resPedidos.json();
+            const boxPedidos = document.getElementById('lista-pedidos');
+            
+            if (pedidos.length === 0) {
+                boxPedidos.innerHTML = '<p>Você ainda não realizou nenhuma compra.</p>';
+                return;
+            }
+
+            boxPedidos.innerHTML = pedidos.map(p => `
+                <div class="pedido-card">
+                    <div class="pedido-header">
+                        <span>Pedido #${p.id} <small style="color:#666; margin-left:10px;">${new Date(p.criado_em).toLocaleDateString('pt-BR')}</small></span>
+                        <span class="status-badge ${p.status}">${p.status}</span>
+                    </div>
+                    ${p.itens.map(i => `
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 10px; font-size: 0.9rem;">
+                            <span>${i.quantidade}x ${i.nome} (Tam: ${i.tamanho})</span>
+                            <strong>R$ ${(Number(i.preco_unitario)*i.quantidade).toFixed(2).replace('.', ',')}</strong>
+                        </div>
+                    `).join('')}
+                    <div style="border-top: 1px solid #eee; margin-top: 15px; padding-top: 10px; text-align: right;">
+                        <strong>Total: R$ ${Number(p.total).toFixed(2).replace('.', ',')}</strong>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function atualizarPerfil(e) {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.innerText = 'Salvando...';
+            
+            const dados = {
+                nome: document.getElementById('p-nome').value,
+                telefone: document.getElementById('p-telefone').value,
+                cep: document.getElementById('p-cep').value,
+                logradouro: document.getElementById('p-logradouro').value,
+                numero: document.getElementById('p-numero').value,
+                complemento: document.getElementById('p-complemento').value,
+                bairro: document.getElementById('p-bairro').value,
+                cidade: document.getElementById('p-cidade').value,
+                estado: document.getElementById('p-estado').value
+            };
+
+            await fetch('/api/usuario/perfil', {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(dados)
+            });
+
+            alert('Dados atualizados com sucesso!');
+            btn.innerText = 'Salvar Alterações';
+        }
+
+        window.onload = carregarDados;
+    </script>
+</body>
+</html>

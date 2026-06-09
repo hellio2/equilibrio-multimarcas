@@ -71,24 +71,71 @@ async function autenticarAdmin(req, res, next) {
 // =========================================================
 // ROTAS DE AUTENTICAÇÃO
 // =========================================================
+// =========================================================
+// ROTA DE CADASTRO SANITIZADA E CORRIGIDA
+// =========================================================
 app.post('/api/auth/cadastro', async (req, res) => {
-    const { nome, email, senha } = req.body;
-    if (!nome || !email || !senha) return res.status(400).json({ erro: 'Preencha todos os campos.' });
+    // Tratamento preventivo: se req.body não vier definido por falha de requisição
+    const body = req.body || {};
+    
+    const { 
+        nome, email, senha, telefone, cep, 
+        logradouro, numero, complemento, bairro, 
+        cidade, estado 
+    } = body;
+
+    // Validação estrita dos campos vitais
+    if (!nome || !email || !senha) {
+        return res.status(400).json({ erro: 'Preencha os campos obrigatórios (Nome, E-mail e Senha).' });
+    }
 
     try {
-        const usuarioExistente = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
-        if (usuarioExistente.rows.length > 0) return res.status(400).json({ erro: 'E-mail já cadastrado.' });
+        // Normaliza o e-mail para evitar duplicidade com letras maiúsculas/minúsculas
+        const emailNormalizado = email.toLowerCase().trim();
 
+        const usuarioExistente = await pool.query('SELECT * FROM usuarios WHERE email = $1', [emailNormalizado]);
+        if (usuarioExistente.rows.length > 0) {
+            return res.status(400).json({ erro: 'Este e-mail já está cadastrado no sistema.' });
+        }
+
+        // Criptografia da senha com salt seguro
         const salt = await bcrypt.genSalt(10);
         const senhaCriptografada = await bcrypt.hash(senha, salt);
 
+        // Substituição de campos vazios/undefined por strings vazias ou NULL para o PostgreSQL aceitar sem quebras
+        const params = [
+            nome.trim(),
+            emailNormalizado,
+            senhaCriptografada,
+            telefone ? telefone.trim() : '',
+            cep ? cep.replace(/\D/g, '') : '', // Armazena apenas os números do CEP
+            logradouro ? logradouro.trim() : '',
+            numero ? numero.trim() : '',
+            complemento ? complemento.trim() : '', // Aceita vazio sem quebrar
+            bairro ? bairro.trim() : '',
+            cidade ? cidade.trim() : '',
+            estado ? estado.trim().toUpperCase() : ''
+        ];
+
         const novoUsuario = await pool.query(
-            'INSERT INTO usuarios (nome, email, senha_hash) VALUES ($1, $2, $3) RETURNING id, nome, email',
-            [nome, email, senhaCriptografada]
+            `INSERT INTO usuarios (
+                nome, email, senha_hash, telefone, cep, 
+                logradouro, numero, complemento, bairro, cidade, estado
+             ) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+             RETURNING id, nome, email`,
+            params
         );
-        res.status(201).json({ sucesso: true, mensagem: 'Conta criada!', usuario: novoUsuario.rows[0] });
+
+        res.status(201).json({ 
+            sucesso: true, 
+            mensagem: 'Conta criada com sucesso!', 
+            usuario: novoUsuario.rows[0] 
+        });
+
     } catch (err) {
-        res.status(500).json({ erro: 'Erro interno no cadastro.' });
+        console.error("❌ Erro Crítico no Processo de Cadastro:", err.message || err);
+        res.status(500).json({ erro: 'Erro interno no servidor ao processar o cadastro.' });
     }
 });
 
@@ -429,4 +476,54 @@ app.get('/api/produtos', async (req, res) => {
 });
 
 app.use((req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+
+// =========================================================
+// ROTAS DO PAINEL DO CLIENTE (PERFIL E MEUS PEDIDOS)
+// =========================================================
+
+// Busca os dados do cliente para preencher o perfil e o checkout
+app.get('/api/usuario/perfil', autenticarToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT nome, email, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado FROM usuarios WHERE id = $1', 
+            [req.usuario.id]
+        );
+        res.status(200).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ erro: 'Erro ao carregar perfil.' }); }
+});
+
+// Atualiza os dados do cliente
+app.put('/api/usuario/perfil', autenticarToken, async (req, res) => {
+    const { nome, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado } = req.body;
+    try {
+        await pool.query(
+            `UPDATE usuarios SET nome=$1, telefone=$2, cep=$3, logradouro=$4, numero=$5, complemento=$6, bairro=$7, cidade=$8, estado=$9 WHERE id=$10`,
+            [nome, telefone, cep, logradouro, numero, complemento, bairro, cidade, estado, req.usuario.id]
+        );
+        res.status(200).json({ sucesso: true, mensagem: 'Perfil atualizado com sucesso!' });
+    } catch (err) { res.status(500).json({ erro: 'Erro ao atualizar perfil.' }); }
+});
+
+// Busca o histórico de compras do cliente logado
+app.get('/api/meus-pedidos', autenticarToken, async (req, res) => {
+    try {
+        const pedidosRes = await pool.query(
+            `SELECT id, total, status, criado_em FROM pedidos WHERE usuario_id = $1 ORDER BY id DESC`, 
+            [req.usuario.id]
+        );
+        
+        const pedidos = pedidosRes.rows;
+        // Puxa as roupas de cada pedido
+        for (let pedido of pedidos) {
+            const itensRes = await pool.query(
+                `SELECT p.nome, p.imagem_url, i.quantidade, i.tamanho, i.preco_unitario 
+                 FROM itens_pedido i JOIN produtos p ON i.produto_id = p.id WHERE i.pedido_id = $1`, 
+                [pedido.id]
+            );
+            pedido.itens = itensRes.rows;
+        }
+        res.status(200).json(pedidos);
+    } catch (err) { res.status(500).json({ erro: 'Erro ao buscar histórico de pedidos.' }); }
+});
+
 app.listen(PORT, () => console.log(`👑 Equilíbrio Multimarcas (Admin Mode) rodando na porta ${PORT}!`));

@@ -1,7 +1,8 @@
 // Verifica o estado da sessão assim que a página abre
 document.addEventListener("DOMContentLoaded", () => {
     const token = localStorage.getItem('equilibrio_token');
-    const userJson = localStorage.getItem('equilibrio_user');
+    // ATUALIZADO: Usando 'equilibrio_usuario' para manter compatibilidade com o botão Admin do main.js
+    const userJson = localStorage.getItem('equilibrio_usuario'); 
 
     const panelDashboard = document.getElementById('panel-dashboard');
     const panelAuthForms = document.getElementById('panel-auth-forms');
@@ -36,7 +37,7 @@ function alternarAba(abaDestino) {
 // ==========================================
 function fazerLogout() {
     localStorage.removeItem('equilibrio_token');
-    localStorage.removeItem('equilibrio_user');
+    localStorage.removeItem('equilibrio_usuario'); // ATUALIZADO
     localStorage.removeItem('equilibrio_cart'); 
     localStorage.removeItem('equilibrio_favorites'); // CORREÇÃO: Agora os favoritos também são limpos ao sair
     window.location.href = 'index.html';
@@ -45,8 +46,7 @@ function fazerLogout() {
 // LÓGICA DE CADASTRO
 document.getElementById('form-cadastro').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const nome = document.getElementById('cad-nome').value;
-    const email = document.getElementById('cad-email').value;
+    
     const senha = document.getElementById('cad-senha').value;
     const feedback = document.getElementById('feedback-cadastro');
 
@@ -56,11 +56,26 @@ document.getElementById('form-cadastro').addEventListener('submit', async (e) =>
         return;
     }
 
+    // CAPTURA TODOS OS NOVOS CAMPOS DO FORMULÁRIO DE CADASTRO
+    const dadosCadastro = {
+        nome: document.getElementById('cad-nome').value,
+        email: document.getElementById('cad-email').value,
+        senha: senha,
+        telefone: document.getElementById('cad-telefone').value,
+        cep: document.getElementById('cad-cep').value,
+        logradouro: document.getElementById('cad-logradouro').value,
+        numero: document.getElementById('cad-numero').value,
+        complemento: document.getElementById('cad-complemento').value,
+        bairro: document.getElementById('cad-bairro').value,
+        cidade: document.getElementById('cad-cidade').value,
+        estado: document.getElementById('cad-estado').value
+    };
+
     try {
         const resposta = await fetch('/api/auth/cadastro', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nome, email, senha })
+            body: JSON.stringify(dadosCadastro) // ENVIA O OBJETO COMPLETO
         });
         const dados = await resposta.json();
 
@@ -99,7 +114,8 @@ document.getElementById('form-login').addEventListener('submit', async (e) => {
             feedback.className = 'form-feedback success';
             
             localStorage.setItem('equilibrio_token', dados.token);
-            localStorage.setItem('equilibrio_user', JSON.stringify(dados.usuario));
+            // ATUALIZADO: Usando 'equilibrio_usuario'
+            localStorage.setItem('equilibrio_usuario', JSON.stringify(dados.usuario));
             
             setTimeout(() => { window.location.href = 'index.html'; }, 1000);
         } else {
