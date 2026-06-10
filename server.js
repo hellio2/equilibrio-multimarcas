@@ -367,7 +367,9 @@ app.get('/api/config/stripe', (req, res) => {
 // =========================================================
 app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
     try {
-        const { metodo, cpf } = req.body;
+        const { metodo, cpf, valorFrete } = req.body;
+        // Converte o frete para número (se não vier nada, considera 0)
+        const freteNum = parseFloat(valorFrete) || 0;
         
         const cartRes = await pool.query(
             `SELECT c.quantidade, p.nome, p.preco 
@@ -376,11 +378,14 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
         );
 
         if (cartRes.rows.length === 0) return res.status(400).json({ erro: 'Carrinho vazio.' });
+        
+        // Soma os itens e adiciona o valor do frete
         const totalCarrinho = cartRes.rows.reduce((acc, item) => acc + (Number(item.preco) * Number(item.quantidade)), 0);
+        const totalFinal = totalCarrinho + freteNum;
 
         // 🔀 STRIPE (CARTÃO)
         if (metodo === 'cartao') {
-            const valorEmCentavos = Math.round(totalCarrinho * 100);
+            const valorEmCentavos = Math.round(totalFinal * 100);
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: valorEmCentavos, currency: 'brl',
                 metadata: { usuario_id: req.usuario.id },
@@ -391,14 +396,12 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
 
         // 🔀 ASAAS (PIX E BOLETO)
         else if (metodo === 'pix' || metodo === 'boleto') {
-            const asaasUrl = 'https://api-sandbox.asaas.com/v3'; //TESTE
-            //const asaasUrl = 'https://api.asaas.com/v3'; //PRODUÇÃO
+            const asaasUrl = 'https://sandbox.asaas.com/api/v3'; 
             const asaasHeaders = {
                 'Content-Type': 'application/json',
                 'access_token': process.env.ASAAS_API_KEY
             };
 
-            // Passo A: Cliente
             const customerReq = await fetch(`${asaasUrl}/customers`, {
                 method: 'POST', headers: asaasHeaders,
                 body: JSON.stringify({
@@ -409,13 +412,8 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
             });
             const customerData = await customerReq.json();
 
-            // 🚨 BLINDAGEM 1: Erro de Cliente/CPF
-            if (customerData.errors) {
-                console.error("Erro Asaas (Cliente):", customerData.errors);
-                return res.status(400).json({ erro: customerData.errors[0].description });
-            }
+            if (customerData.errors) return res.status(400).json({ erro: customerData.errors[0].description });
 
-            // Passo B: Cobrança
             let dueDate = new Date();
             dueDate.setDate(dueDate.getDate() + 3);
 
@@ -424,29 +422,20 @@ app.post('/api/pagamento/processar', autenticarToken, async (req, res) => {
                 body: JSON.stringify({
                     customer: customerData.id,
                     billingType: metodo.toUpperCase(),
-                    value: Number(totalCarrinho),
+                    value: Number(totalFinal), // O Asaas agora recebe o total + frete
                     dueDate: dueDate.toISOString().split('T')[0],
                     description: 'Pedido - Equilíbrio Multimarcas'
                 })
             });
             const paymentData = await paymentReq.json();
 
-            // 🚨 BLINDAGEM 2: Erro de Cobrança
-            if (paymentData.errors) {
-                console.error("Erro Asaas (Cobrança):", paymentData.errors);
-                return res.status(400).json({ erro: paymentData.errors[0].description });
-            }
+            if (paymentData.errors) return res.status(400).json({ erro: paymentData.errors[0].description });
 
-            // Passo C: QR Code (se for Pix)
             let qrCodeData = null;
             if (metodo === 'pix') {
                 const qrReq = await fetch(`${asaasUrl}/payments/${paymentData.id}/pixQrCode`, { headers: asaasHeaders });
                 qrCodeData = await qrReq.json();
-                
-                // 🚨 BLINDAGEM 3: Erro do QR Code
-                if (qrCodeData.errors) {
-                    return res.status(400).json({ erro: qrCodeData.errors[0].description });
-                }
+                if (qrCodeData.errors) return res.status(400).json({ erro: qrCodeData.errors[0].description });
             }
 
             return res.status(200).json({
@@ -496,22 +485,23 @@ app.post('/api/webhooks/asaas', async (req, res) => {
     res.status(200).send('OK'); 
 });
 
-// =========================================================
-// ROTAS DE PEDIDOS E PÚBLICAS
-// =========================================================
 app.post('/api/pedidos', autenticarToken, async (req, res) => {
     try {
+        const { valorFrete } = req.body || {};
+        const freteNum = parseFloat(valorFrete) || 0;
+
         const cartRes = await pool.query(
             `SELECT c.quantidade, c.tamanho, p.id as produto_id, p.preco 
              FROM carrinho c JOIN produtos p ON c.produto_id = p.id WHERE c.usuario_id = $1`, [req.usuario.id]
         );
         if(cartRes.rows.length === 0) return res.status(400).json({erro: "Carrinho vazio"});
 
-        const total = cartRes.rows.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
+        const totalCarrinho = cartRes.rows.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
+        const totalFinal = totalCarrinho + freteNum; // Salva o total com o frete no banco
 
         const pedRes = await pool.query(
             `INSERT INTO pedidos (usuario_id, total, status) VALUES ($1, $2, 'Pendente') RETURNING id`, 
-            [req.usuario.id, total]
+            [req.usuario.id, totalFinal]
         );
         const pedidoId = pedRes.rows[0].id;
 

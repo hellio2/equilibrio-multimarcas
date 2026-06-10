@@ -133,7 +133,14 @@
 
     <script>
         // =========================================================
-        // LÓGICA DE ABAS DA INTERFACE
+        // VARIÁVEIS GLOBAIS
+        // =========================================================
+        let valorFreteSelecionado = 0;
+        let stripeAPI = null;
+        let stripeElements = null;
+
+        // =========================================================
+        // LÓGICA DE ABAS E PREENCHIMENTO DE ENDEREÇO
         // =========================================================
         function mudarAba(abaEscolhida) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -142,31 +149,6 @@
             document.getElementById('aba-' + abaEscolhida).classList.add('active');
         }
 
-        // =========================================================
-        // VIACEP E PREENCHIMENTO AUTOMÁTICO DE ENDEREÇO
-        // =========================================================
-        
-        // Puxa o endereço salvo do banco ao abrir o checkout
-        document.addEventListener("DOMContentLoaded", async () => {
-            const token = localStorage.getItem('equilibrio_token');
-            if(token) {
-                try {
-                    const res = await fetch('/api/usuario/perfil', { headers: { 'Authorization': `Bearer ${token}` } });
-                    if(res.ok) {
-                        const perfil = await res.json();
-                        document.getElementById('envio-cep').value = perfil.cep || '';
-                        document.getElementById('envio-logradouro').value = perfil.logradouro || '';
-                        document.getElementById('envio-numero').value = perfil.numero || '';
-                        document.getElementById('envio-complemento').value = perfil.complemento || '';
-                        document.getElementById('envio-bairro').value = perfil.bairro || '';
-                        document.getElementById('envio-cidade').value = perfil.cidade || '';
-                        document.getElementById('envio-estado').value = perfil.estado || '';
-                    }
-                } catch(e) { console.error("Erro ao puxar endereço no checkout", e); }
-            }
-        });
-
-        // Script do ViaCEP para o Checkout
         async function buscarCep(idCep, idLog, idBairro, idCidade, idEstado) {
             const cep = document.getElementById(idCep).value.replace(/\D/g, '');
             if (cep.length === 8) {
@@ -182,8 +164,13 @@
         }
 
         // =========================================================
-        // LÓGICA DE FRETE (MELHOR ENVIO)
+        // LÓGICA DE FRETE (MELHOR ENVIO COM SELEÇÃO)
         // =========================================================
+        function selecionarFrete(valor) {
+            valorFreteSelecionado = Number(valor);
+            carregarStripe(valorFreteSelecionado); // Recarrega a Stripe com o novo valor somado
+        }
+
         async function calcularFrete() {
             const cep = document.getElementById('cep-input').value;
             const container = document.getElementById('frete-resultados');
@@ -199,17 +186,23 @@
                 const dados = await resposta.json();
                 
                 if (resposta.ok) {
-                    container.innerHTML = dados.fretes.map(f => {
-                        // Trata o nome (caso venha a contingência que não tem Nome)
+                    container.innerHTML = dados.fretes.map((f, index) => {
                         const nomeServico = f.Nome || (f.Codigo === '04014' ? 'SEDEX' : 'PAC');
-                        // Garante que o valor exibido tenha duas casas decimais com vírgula
                         const valorFormatado = Number(f.Valor).toFixed(2).replace('.', ',');
+                        
+                        // Seleciona a primeira opção (mais barata) por padrão
+                        const isChecked = index === 0 ? 'checked' : '';
+                        if (index === 0) selecionarFrete(f.Valor);
 
                         return `
-                            <div class="frete-card">
-                                <div><strong>${nomeServico}</strong><br><small>${f.PrazoEntrega} dias úteis</small></div>
-                                <strong>R$ ${valorFormatado}</strong>
-                            </div>
+                            <label class="frete-card" style="display:flex; align-items:center; justify-content: flex-start; gap: 15px; cursor: pointer; background: #fff;">
+                                <input type="radio" name="opcao_frete" value="${f.Valor}" ${isChecked} onchange="selecionarFrete(this.value)" style="transform: scale(1.3);">
+                                <div style="flex: 1; text-align: left;">
+                                    <strong style="font-size: 1.1rem; text-transform: uppercase;">${nomeServico}</strong><br>
+                                    <small style="color: #666;">${f.PrazoEntrega} dias úteis</small>
+                                </div>
+                                <strong style="font-size: 1.2rem; color: #111;">R$ ${valorFormatado}</strong>
+                            </label>
                         `;
                     }).join('');
                 } else { 
@@ -221,7 +214,44 @@
         }
 
         // =========================================================
-        // INICIALIZAÇÃO DA STRIPE (SOMENTE ABA CARTÃO)
+        // CARREGAMENTO E ATUALIZAÇÃO DA STRIPE
+        // =========================================================
+        async function carregarStripe(valorFrete = 0) {
+            const tokenAuth = localStorage.getItem('equilibrio_token');
+            if (!tokenAuth) return;
+
+            try {
+                document.getElementById('payment-element').innerHTML = '<p style="text-align: center; color: #666; padding: 40px;"><i class="fas fa-spinner fa-spin"></i> Atualizando valor do pagamento...</p>';
+                
+                if (!stripeAPI) {
+                    const configRes = await fetch('/api/config/stripe');
+                    const configData = await configRes.json();
+                    stripeAPI = Stripe(configData.publicKey);
+                }
+
+                // Envia o frete selecionado para o backend somar
+                const processRes = await fetch('/api/pagamento/processar', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${tokenAuth}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ metodo: 'cartao', valorFrete: valorFrete })
+                });
+                const data = await processRes.json();
+
+                if (data.erro) throw new Error(data.erro);
+
+                const appearance = { theme: 'stripe' };
+                stripeElements = stripeAPI.elements({ appearance, clientSecret: data.clientSecret });
+                const paymentElement = stripeElements.create('payment', { wallets: { applePay: 'auto', googlePay: 'auto' } });
+                
+                document.getElementById('payment-element').innerHTML = '';
+                paymentElement.mount('#payment-element');
+            } catch (error) {
+                document.getElementById('payment-element').innerHTML = `<p style="color: red;">Falha ao carregar formulário de cartão.</p>`;
+            }
+        }
+
+        // =========================================================
+        // INICIALIZAÇÃO GERAL DA PÁGINA
         // =========================================================
         document.addEventListener("DOMContentLoaded", async () => {
             const tokenAuth = localStorage.getItem('equilibrio_token');
@@ -231,42 +261,46 @@
                 return;
             }
 
+            // 1. Puxa o Endereço
             try {
-                const configRes = await fetch('/api/config/stripe');
-                const configData = await configRes.json();
-                const stripe = Stripe(configData.publicKey);
+                const res = await fetch('/api/usuario/perfil', { headers: { 'Authorization': `Bearer ${tokenAuth}` } });
+                if(res.ok) {
+                    const perfil = await res.json();
+                    document.getElementById('envio-cep').value = perfil.cep || '';
+                    document.getElementById('envio-logradouro').value = perfil.logradouro || '';
+                    document.getElementById('envio-numero').value = perfil.numero || '';
+                    document.getElementById('envio-complemento').value = perfil.complemento || '';
+                    document.getElementById('envio-bairro').value = perfil.bairro || '';
+                    document.getElementById('envio-cidade').value = perfil.cidade || '';
+                    document.getElementById('envio-estado').value = perfil.estado || '';
+                }
+            } catch(e) {}
 
-                const processRes = await fetch('/api/pagamento/processar', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${tokenAuth}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ metodo: 'cartao' })
-                });
-                const data = await processRes.json();
+            // 2. Carrega a Stripe com frete R$ 0,00 inicial
+            carregarStripe(0);
 
-                if (data.erro) throw new Error(data.erro);
+            // 3. Configura o botão de pagar da Stripe
+            const form = document.getElementById('payment-form');
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!stripeAPI || !stripeElements) return;
 
-                const appearance = { theme: 'stripe' };
-                const elements = stripe.elements({ appearance, clientSecret: data.clientSecret });
-                const paymentElement = elements.create('payment', { wallets: { applePay: 'auto', googlePay: 'auto' } });
-                
-                document.getElementById('payment-element').innerHTML = '';
-                paymentElement.mount('#payment-element');
+                document.getElementById('button-text').innerText = "Processando...";
+                const btnSubmit = document.getElementById('submit');
+                btnSubmit.disabled = true;
 
-                const form = document.getElementById('payment-form');
-                form.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    document.getElementById('button-text').innerText = "Processando...";
-                    const btnSubmit = document.getElementById('submit');
-                    btnSubmit.disabled = true;
-
-                    // 1. SALVA O PEDIDO NO BANCO E PEGA O ID
-                    const pedRes = await fetch('/api/pedidos', { method: 'POST', headers: { 'Authorization': `Bearer ${tokenAuth}` } });
+                try {
+                    // Salva o pedido com o Frete incluído
+                    const pedRes = await fetch('/api/pedidos', { 
+                        method: 'POST', 
+                        headers: { 'Authorization': `Bearer ${tokenAuth}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ valorFrete: valorFreteSelecionado })
+                    });
                     const pedDados = await pedRes.json();
                     const idPedido = pedDados.pedido_id || 'Aprovado';
 
-                    // 2. ENVIA PARA A STRIPE COM O ID DO PEDIDO NA URL
-                    const { error } = await stripe.confirmPayment({
-                        elements,
+                    const { error } = await stripeAPI.confirmPayment({
+                        elements: stripeElements,
                         confirmParams: { return_url: window.location.origin + '/sucesso.html?pedido=' + idPedido }
                     });
 
@@ -277,31 +311,38 @@
                         document.getElementById('button-text').innerText = "Pagar com Cartão";
                         btnSubmit.disabled = false;
                     }
-                });
-            } catch (error) {
-                document.getElementById('payment-element').innerHTML = `<p style="color: red;">Falha ao carregar formulário de cartão.</p>`;
-            }
+                } catch(err) {
+                    alert("Erro ao processar.");
+                    btnSubmit.disabled = false;
+                }
+            });
         });
 
         // =========================================================
-        // PROCESSAMENTO ASAAS (PIX E BOLETO)
+        // PROCESSAMENTO ASAAS (PIX E BOLETO COM FRETE INCLUÍDO)
         // =========================================================
         async function processarAsaas(metodo) {
             const cpfInput = document.getElementById(`cpf-${metodo}`);
             const btnAcao = document.getElementById(`btn-gerar-${metodo}`);
             
-            if (cpfInput.value.length < 11) return alert("Por favor, digite um CPF válido.");
+            if (cpfInput.value.length < 11) {
+                alert("Por favor, digite um CPF válido.");
+                return;
+            }
 
             btnAcao.innerText = "Conectando ao banco...";
             btnAcao.disabled = true;
 
             try {
                 const tokenAuth = localStorage.getItem('equilibrio_token');
+                
                 const resposta = await fetch('/api/pagamento/processar', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${tokenAuth}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ metodo: metodo, cpf: cpfInput.value })
+                    // Envia o frete para o Asaas também!
+                    body: JSON.stringify({ metodo: metodo, cpf: cpfInput.value, valorFrete: valorFreteSelecionado })
                 });
+
                 const dados = await resposta.json();
 
                 if (dados.erro) {
@@ -311,11 +352,13 @@
                     return;
                 }
 
-                // 1. SALVA O PEDIDO NO BANCO APÓS GERAR O PIX/BOLETO
-                const pedRes = await fetch('/api/pedidos', { method: 'POST', headers: { 'Authorization': `Bearer ${tokenAuth}` } });
+                const pedRes = await fetch('/api/pedidos', { 
+                    method: 'POST', 
+                    headers: { 'Authorization': `Bearer ${tokenAuth}`, 'Content-Type': 'application/json' },
+                    // Salva o pedido com o Frete
+                    body: JSON.stringify({ valorFrete: valorFreteSelecionado })
+                });
                 const pedDados = await pedRes.json();
-                
-                // Salva o ID globalmente para o botão "Concluir Pedido"
                 window.pedidoAtualId = pedDados.pedido_id || 'Pendente';
 
                 cpfInput.classList.add('hidden');
@@ -329,6 +372,7 @@
                     document.getElementById('boleto-area-resultado').classList.remove('hidden');
                     document.getElementById('boleto-link').href = dados.boleto_url;
                 }
+
             } catch (error) {
                 alert("Erro ao processar com o banco.");
                 btnAcao.innerText = "Tentar Novamente";
