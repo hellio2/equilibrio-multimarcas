@@ -182,14 +182,14 @@
         }
 
         // =========================================================
-        // LÓGICA DE FRETE CORREIOS
+        // LÓGICA DE FRETE (MELHOR ENVIO)
         // =========================================================
         async function calcularFrete() {
             const cep = document.getElementById('cep-input').value;
             const container = document.getElementById('frete-resultados');
             if (cep.length < 8) return alert('Digite um CEP válido.');
             
-            container.innerHTML = '<p>Calculando rota com os Correios...</p>';
+            container.innerHTML = '<p>Calculando rota de entrega...</p>';
             try {
                 const resposta = await fetch('/api/frete', {
                     method: 'POST',
@@ -197,15 +197,27 @@
                     body: JSON.stringify({ cep_destino: cep })
                 });
                 const dados = await resposta.json();
+                
                 if (resposta.ok) {
-                    container.innerHTML = dados.fretes.map(f => `
-                        <div class="frete-card">
-                            <div><strong>${f.Codigo === '04014' ? 'SEDEX' : 'PAC'}</strong><br><small>${f.PrazoEntrega} dias úteis</small></div>
-                            <strong>R$ ${f.Valor}</strong>
-                        </div>
-                    `).join('');
-                } else { container.innerHTML = `<p style="color: red;">${dados.erro}</p>`; }
-            } catch (e) { container.innerHTML = '<p style="color: red;">Erro ao calcular frete.</p>'; }
+                    container.innerHTML = dados.fretes.map(f => {
+                        // Trata o nome (caso venha a contingência que não tem Nome)
+                        const nomeServico = f.Nome || (f.Codigo === '04014' ? 'SEDEX' : 'PAC');
+                        // Garante que o valor exibido tenha duas casas decimais com vírgula
+                        const valorFormatado = Number(f.Valor).toFixed(2).replace('.', ',');
+
+                        return `
+                            <div class="frete-card">
+                                <div><strong>${nomeServico}</strong><br><small>${f.PrazoEntrega} dias úteis</small></div>
+                                <strong>R$ ${valorFormatado}</strong>
+                            </div>
+                        `;
+                    }).join('');
+                } else { 
+                    container.innerHTML = `<p style="color: red;">${dados.erro}</p>`; 
+                }
+            } catch (e) { 
+                container.innerHTML = '<p style="color: red;">Erro ao calcular frete.</p>'; 
+            }
         }
 
         // =========================================================

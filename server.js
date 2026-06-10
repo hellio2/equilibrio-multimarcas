@@ -272,7 +272,7 @@ app.delete('/api/favoritos/:produto_id', autenticarToken, async (req, res) => {
 });
 
 // =========================================================
-// ROTAS DE LOGÍSTICA (CÁLCULO DE FRETE VIA CORREIOS - CORRIGIDO)
+// ROTAS DE LOGÍSTICA (CÁLCULO DE FRETE MODERNO - MELHOR ENVIO)
 // =========================================================
 app.post('/api/frete', async (req, res) => {
     const { cep_destino } = req.body;
@@ -284,37 +284,78 @@ app.post('/api/frete', async (req, res) => {
     try {
         const cepOrigem = process.env.CEP_ORIGEM || "01001000"; 
         const cepLimpoDestino = cep_destino.replace(/\D/g, '');
+        const tokenMelhorEnvio = process.env.MELHOR_ENVIO_TOKEN;
 
-        // Configuração conforme a API mais recente dos Correios-Brasil
-        let args = {
-            sCepOrigem: cepOrigem,
-            sCepDestino: cepLimpoDestino,
-            nVlPeso: '0.5', // Peso padrão para roupas (500g)
-            nCdFormato: '1', // 1 para Caixa/Pacote
-            nVlComprimento: '20',
-            nVlAltura: '5',
-            nVlLargura: '15',
-            nCdServico: ['04014', '04510'], // SEDEX à vista e PAC à vista
-            nVlDiametro: '0',
-        };
-
-        const correiosResult = await calcularPrecoPrazo(args);
-
-        // Tratamento de segurança: se a API retornar mas vier com erro interno dos Correios
-        if (!correiosResult || correiosResult.length === 0 || correiosResult[0].MsgErro) {
-            throw new Error(correiosResult[0]?.MsgErro || "Erro interno na resposta dos Correios");
+        // SE O TOKEN AINDA NÃO FOI CONFIGURADO, USA A CONTINGÊNCIA IMEDIATAMENTE
+        if (!tokenMelhorEnvio || tokenMelhorEnvio === "cole_seu_token_gigante_aqui") {
+            throw new Error("Token do Melhor Envio não configurado.");
         }
 
-        res.status(200).json({ sucesso: true, fretes: correiosResult });
+        // URL da API de Produção do Melhor Envio (Se for ambiente de teste deles, use a URL de Sandbox)
+        const urlMelhorEnvio = 'https://www.melhorenvio.com.br/api/v2/me/shipment/calculate';
+
+        const payload = {
+            "from": { "postal_code": cepOrigem },
+            "to": { "postal_code": cepLimpoDestino },
+            // Os Correios/Transportadoras exigem as dimensões da caixa (Abaixo é o padrão p/ roupas)
+            "package": {
+                "weight": 0.5,
+                "width": 20,
+                "height": 5,
+                "length": 15
+            },
+            // Você pode limitar quais empresas quer que apareçam. (Ex: 1 = PAC, 2 = SEDEX)
+            // Se enviar "services" vazio, ele cota todas as disponíveis.
+            "options": {
+                "insurance_value": 0,
+                "receipt": false,
+                "own_hand": false
+            }
+        };
+
+        const response = await fetch(urlMelhorEnvio, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${tokenMelhorEnvio}`,
+                'User-Agent': 'EquilibrioMultimarcas (suporte@equilibriomultimarcas.com)'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(`Erro API Melhor Envio: ${errData.message || response.statusText}`);
+        }
+
+        const cotacoesData = await response.json();
+
+        // Mapeia a resposta da API do Melhor Envio para o formato que nosso Frontend já entende
+        const fretesDisponiveis = cotacoesData
+            .filter(cotacao => !cotacao.error) // Ignora transportadoras que não atendem a região
+            .map(cotacao => ({
+                Codigo: cotacao.id, // ID interno do serviço
+                Nome: cotacao.name, // Ex: "PAC", "Sedex", ".Com" (Jadlog)
+                Valor: cotacao.price, // Valor final cobrado (Ex: "18.50")
+                PrazoEntrega: cotacao.delivery_time // Dias
+            }));
+
+        if (fretesDisponiveis.length === 0) {
+            return res.status(400).json({ erro: 'Nenhuma transportadora disponível para este CEP.' });
+        }
+
+        res.status(200).json({ sucesso: true, fretes: fretesDisponiveis });
+
     } catch (err) {
-        console.error("⚠️ Falha na API dos Correios, aplicando contingência comercial:", err.message || err);
+        console.error("⚠️ Falha no cálculo de frete (Aplicando contingência):", err.message);
         
-        // Valores baseados em tabelas comerciais reais para e-commerce (Evita travar o carrinho do cliente)
+        // Mantém a contingência caso a internet caia ou a API falhe, não travando a venda.
         res.status(200).json({
             sucesso: true, 
             fretes: [
-                { Codigo: '04014', Valor: '22,50', PrazoEntrega: '2 a 4' }, // Simulação Sedex
-                { Codigo: '04510', Valor: '14,80', PrazoEntrega: '5 a 8' }  // Simulação PAC
+                { Codigo: '04014', Nome: 'SEDEX', Valor: '22.50', PrazoEntrega: '3' }, 
+                { Codigo: '04510', Nome: 'PAC', Valor: '14.80', PrazoEntrega: '7' }  
             ]
         });
     }
