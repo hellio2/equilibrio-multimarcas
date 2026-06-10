@@ -286,26 +286,23 @@ app.post('/api/frete', async (req, res) => {
         const cepLimpoDestino = cep_destino.replace(/\D/g, '');
         const tokenMelhorEnvio = process.env.MELHOR_ENVIO_TOKEN;
 
-        // SE O TOKEN AINDA NÃO FOI CONFIGURADO, USA A CONTINGÊNCIA IMEDIATAMENTE
         if (!tokenMelhorEnvio || tokenMelhorEnvio === "cole_seu_token_gigante_aqui") {
             throw new Error("Token do Melhor Envio não configurado.");
         }
 
-        // URL da API de Produção do Melhor Envio (Se for ambiente de teste deles, use a URL de Sandbox)
-        const urlMelhorEnvio = 'https://www.melhorenvio.com.br/api/v2/me/shipment/calculate';
+        const urlMelhorEnvio = 'https://sandbox.melhorenvio.com.br/api/v2/me/shipment/calculate';
 
         const payload = {
             "from": { "postal_code": cepOrigem },
             "to": { "postal_code": cepLimpoDestino },
-            // Os Correios/Transportadoras exigem as dimensões da caixa (Abaixo é o padrão p/ roupas)
+            // RESTRICAO: 1 = PAC, 2 = SEDEX
+            "services": "1,2", 
             "package": {
                 "weight": 0.5,
                 "width": 20,
                 "height": 5,
                 "length": 15
             },
-            // Você pode limitar quais empresas quer que apareçam. (Ex: 1 = PAC, 2 = SEDEX)
-            // Se enviar "services" vazio, ele cota todas as disponíveis.
             "options": {
                 "insurance_value": 0,
                 "receipt": false,
@@ -331,14 +328,15 @@ app.post('/api/frete', async (req, res) => {
 
         const cotacoesData = await response.json();
 
-        // Mapeia a resposta da API do Melhor Envio para o formato que nosso Frontend já entende
         const fretesDisponiveis = cotacoesData
-            .filter(cotacao => !cotacao.error) // Ignora transportadoras que não atendem a região
+            .filter(cotacao => !cotacao.error)
+            // FILTRO EXTRA DE SEGURANÇA: Garante que só passem os Correios
+            .filter(cotacao => cotacao.id === 1 || cotacao.id === 2 || cotacao.name.toUpperCase().includes('PAC') || cotacao.name.toUpperCase().includes('SEDEX'))
             .map(cotacao => ({
-                Codigo: cotacao.id, // ID interno do serviço
-                Nome: cotacao.name, // Ex: "PAC", "Sedex", ".Com" (Jadlog)
-                Valor: cotacao.price, // Valor final cobrado (Ex: "18.50")
-                PrazoEntrega: cotacao.delivery_time // Dias
+                Codigo: cotacao.id, 
+                Nome: cotacao.name, 
+                Valor: cotacao.price, 
+                PrazoEntrega: cotacao.delivery_time 
             }));
 
         if (fretesDisponiveis.length === 0) {
@@ -350,7 +348,6 @@ app.post('/api/frete', async (req, res) => {
     } catch (err) {
         console.error("⚠️ Falha no cálculo de frete (Aplicando contingência):", err.message);
         
-        // Mantém a contingência caso a internet caia ou a API falhe, não travando a venda.
         res.status(200).json({
             sucesso: true, 
             fretes: [
